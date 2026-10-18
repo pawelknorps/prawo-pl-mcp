@@ -24,6 +24,9 @@ class SearchSpec:
     date_to_param: str | None = None
     page_param: str | None = None
     page_base: int = 1  # 0 = natywna paginacja liczona od 0
+    # Zrodlo stronicuje przez limit/offset zamiast page/pageNumber. Wtedy
+    # unified `page` nie ma gdzie trafic przez page_param - liczymy offset.
+    offset_param: str | None = None
     size_param: str | None = None
     size_max: int | None = None
     size_min: int | None = None  # np. SAOS pageSize min=10 - clamp zamiast cichego ignorowania
@@ -346,12 +349,71 @@ SOURCES: dict[str, Source] = {
             notes="legalize_search_laws needs a GitHub token (code search). "
             "Reform timeline via pl_call tool=legalize_list_reforms.",
         ),
+        Source(
+            id="law-scrapper",
+            name="Law Scrapper MCP - ISAP/ELI legislation with relationship graph",
+            coverage="Polish legal acts (DU/MP) with amendment/reference graph, "
+            "result-set filtering, change tracking and legal-date math. Upstream is "
+            "the same api.sejm.gov.pl as `isap` - only the delta below justifies it.",
+            group="pl",
+            runtime="git-uvx",
+            package="git+https://github.com/numikel/law-scrapper-mcp law-scrapper",
+            search=SearchSpec(
+                tool="search_legal_acts",
+                query_param="keywords",
+                date_from_param="date_from",
+                date_to_param="date_to",
+                offset_param="offset",
+                size_param="limit",
+            ),
+            get=GetSpec(
+                tool="get_act_details",
+                id_param="eli",
+                id_hint="ELI identifier DU/YYYY/POS, e.g. DU/2024/1. Metadata + TOC only - "
+                "text needs pl_call tool=read_act_content(eli, section). `search_in_act` "
+                "greps within an act.",
+            ),
+            native_tools=(
+                "get_system_metadata",
+                "search_legal_acts",
+                "browse_acts",
+                "get_act_details",
+                "read_act_content",
+                "list_loaded_documents",
+                "search_in_act",
+                "analyze_act_relationships",
+                "track_legal_changes",
+                "calculate_legal_date",
+                "filter_results",
+                "list_result_sets",
+                "compare_acts",
+            ),
+            notes="SCOPE: prefer `isap` for ordinary act search/fetch - this entry exists "
+            "only for the 4 capabilities isap lacks: analyze_act_relationships, "
+            "track_legal_changes, filter_results (complete-vs-page scope), "
+            "calculate_legal_date. Prefer pl_call for those. Content is TWO-STEP: "
+            "pl_get_document returns metadata + TOC, not text; the body comes from "
+            "pl_call tool=read_act_content. Pagination is limit/offset (not page), so "
+            "`page`/`limit` are translated to offset arithmetic - pass native values "
+            "via extra to be explicit. Runs from git (not on PyPI): needs network on "
+            "first call. Single-maintainer dependency - pin by commit SHA when stable.",
+        ),
     ]
 }
 
 
 def get_source(source_id: str) -> Source | None:
     return SOURCES.get(source_id.strip().lower())
+
+
+def offset_for(spec: SearchSpec, page: int, limit: int | None) -> int:
+    """Offset dla zrodel stronicujacych limit/offset. `page` jest 1-based.
+
+    Rozmiar strony: jawny `limit`, inaczej size_max, inaczej 20. Bez tego
+    unified `page` nie mialby jak trafic do zrodla bez page_param.
+    """
+    page_size = limit if limit is not None else (spec.size_max or 20)
+    return (page - 1) * page_size
 
 
 def native_params(s: Source) -> dict:
@@ -375,6 +437,9 @@ def native_params(s: Source) -> dict:
         if sp.page_param:
             entry["page"] = sp.page_param
             entry["page_base"] = sp.page_base  # unified `page` zawsze od 1
+        if sp.offset_param:
+            entry["page"] = sp.offset_param
+            entry["pagination"] = "offset"  # unified `page` liczy offset z rozmiaru strony
         if sp.size_param:
             entry["limit"] = sp.size_param
             if sp.size_max is not None:

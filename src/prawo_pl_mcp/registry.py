@@ -398,6 +398,94 @@ SOURCES: dict[str, Source] = {
             "via extra to be explicit. Runs from git (not on PyPI): needs network on "
             "first call. Single-maintainer dependency - pin by commit SHA when stable.",
         ),
+        Source(
+            id="echr",
+            name="ECHR / ETPC - European Court of Human Rights case law (HUDOC)",
+            coverage="Judgments, decisions and advisory opinions of the European Court of "
+            "Human Rights from the official HUDOC database, in EN/FR (and the Court's "
+            "other languages). Search by application number, Convention article, "
+            "document type and key date; full judgment text as plain text. The only "
+            "connector in the fleet covering the Strasbourg court.",
+            group="eu",
+            runtime="git-uvx",
+            package="git+https://github.com/pawelknorps/echr-mcp echr-mcp",
+            search=SearchSpec(
+                tool="search_judgments",
+                query_param="query",
+                date_from_param="kpdate_from",
+                date_to_param="kpdate_to",
+                offset_param="offset",
+                size_param="limit",
+                size_max=100,
+            ),
+            get=GetSpec(
+                tool="get_judgment_text",
+                id_param="itemid",
+                id_hint="HUDOC itemid from search results (e.g. '001-250747'); the "
+                "connector resolves the requested language, then falls back to a "
+                "same-kind sibling when the itemid is a placeholder. Read the document "
+                "name from the search hit first.",
+            ),
+            native_tools=(
+                "search_judgments",
+                "get_judgment_text",
+                "list_hudoc_filters",
+                "echr_coverage",
+            ),
+            notes="Scope: the ECHR itself (Strasbourg), NOT EU law - use eu-sparql for "
+            "CJEU and eu-compliance for EU regulations. `query` free text works only as "
+            "a bracketed phrase; structured filters (`appno`, `article`, `doctype`, "
+            "date range) are more reliable - pass them via extra using the native names "
+            "listed in native_params (extra={'appno': '474/21'}). Enumerations for "
+            "doctype/article/collection are static via pl_call tool=list_hudoc_filters. "
+            "Pagination is limit/offset (HUDOC start/length), so `page`/`limit` are "
+            "translated to offset arithmetic. Runs from git (not on PyPI): needs network "
+            "on first call. Single-maintainer dependency - pin by commit SHA when stable.",
+        ),
+        Source(
+            id="sejm-process",
+            name="Sejm - legislative process (draft bills, stages, prints)",
+            coverage="The legislative track of draft bills and resolutions in the Sejm "
+            "(lower chamber): per-term project lists, the full stage timeline of a "
+            "process (readings, committee referrals, votes with yes/no/abstain, Senate "
+            "position) and parliamentary prints with attachment URLs. Official "
+            "api.sejm.gov.pl REST API. This is the *process*, not the enacted text.",
+            group="pl",
+            runtime="git-uvx",
+            package="git+https://github.com/pawelknorps/sejm-process-mcp sejm-process-mcp",
+            search=SearchSpec(
+                tool="search_drafts",
+                query_param="query",
+                date_from_param="date_from",
+                date_to_param="date_to",
+                offset_param="offset",
+                size_param="limit",
+                size_max=500,
+            ),
+            get=GetSpec(
+                tool="get_process",
+                id_param="number",
+                id_hint="process number from search_drafts (e.g. '32'); it is a key only "
+                "WITHIN a term, so pass the same term via extra={'term': '10'} (default "
+                "'10' is the current term). For a print, pl_call tool=get_print with "
+                "extra={'term': ..., 'number': ...}.",
+            ),
+            native_tools=(
+                "search_drafts",
+                "get_process",
+                "get_print",
+                "sejm_coverage",
+            ),
+            notes="Scope split: this is the legislative PROCESS; the enacted text lives in "
+            "`isap`/`eli`. The Sejm API has no server-side search, so `search_drafts` "
+            "filters ONE fetched page (limit, default 50) client-side - a query can miss "
+            "matches on a later page; page through with `page`/`limit` or widen the date "
+            "range. `document_type` matching is substring and case-sensitive on Polish "
+            "stemming ('ustawy' hits, 'ustawa' does not). The key is `number` + `term`, "
+            "not ELI. Pagination is limit/offset, so `page`/`limit` are translated to "
+            "offset arithmetic. Runs from git (not on PyPI): needs network on first "
+            "call. Single-maintainer dependency - pin by commit SHA when stable.",
+        ),
     ]
 }
 
